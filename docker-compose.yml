@@ -1,0 +1,31 @@
+services:
+  app:
+    build: .
+    image: metricgraph:local
+    ports:
+      - "18215:8000"
+    environment:
+      METRICGRAPH_DB: /data/metricgraph.sqlite
+      METRICGRAPH_RULESET: fm-2026.11.1
+      TZ: UTC
+    volumes:
+      - metricgraph-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import sys, urllib.request
+          try:
+              code = urllib.request.urlopen("http://127.0.0.1:8000/api/health", timeout=2).status
+          except Exception:
+              sys.exit(1)
+          sys.exit(0 if code == 200 else 1)
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+
+volumes:
+  metricgraph-data:

@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}规格单 · metricgraph{% endblock %}
+{% block body %}
+<section class="doc-section panel">
+  <h1>规格单</h1>
+  <p class="lede kpis">字段 <span class="mono">{{ counts.old_total or 0 }}</span> → <span class="mono">{{ counts.new_total or 0 }}</span>　破坏 <span class="mono">{{ counts.breaking or 0 }}</span>　断链 <span class="mono">{{ counts.refs_broken or 0 }}</span></p>
+  <div class="actions">
+    <button type="button" data-action="import">采信样例</button>
+    <a class="btn ghost" href="/api/schemas/quarantine.csv">隔离区 CSV</a>
+    <input type="search" data-filter placeholder="筛选" aria-label="筛选">
+    <span class="flash" data-flash></span>
+  </div>
+
+  {% if empty %}
+  <p class="empty">还没有批次。</p>
+  {% else %}
+  <div class="wrap-scroll">
+    <table>
+      <caption>字段清单<sup class="fn">1</sup></caption>
+      <thead>
+        <tr>
+          <th>表</th>
+          <th>字段</th>
+          <th>类型</th>
+          <th>必填</th>
+          <th>状态</th>
+          <th>原因</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td class="name">{{ row.table }}</td>
+          <td class="name" title="{{ row.field_id }}">
+            {% if row.old_name and row.new_name and row.old_name != row.new_name %}
+            <span class="from">{{ row.old_name }}</span> → {{ row.new_name }}
+            {% elif row.old_name %}{{ row.old_name }}
+            {% else %}{{ row.new_name }}{% endif %}
+          </td>
+          <td class="name">
+            {% if row.old_type and row.new_type and row.old_type != row.new_type %}
+            <span class="from">{{ row.old_type }}</span> → {{ row.new_type }}
+            {% elif row.old_type %}{{ row.old_type }}
+            {% else %}{{ row.new_type }}{% endif %}
+          </td>
+          <td>{% if row.new_required is none %}—{% elif row.new_required %}是{% else %}否{% endif %}</td>
+          <td>
+            {% if row.verdict == 'BREAKING' %}<span class="st st-bad">破坏</span>
+            {% elif row.verdict == 'COMPATIBLE_BY_MAPPING' %}<span class="st st-warn">别名</span>
+            {% else %}<span class="st st-ok">兼容</span>{% endif %}
+          </td>
+          <td class="reason"><span class="code">{{ row.primary|reason }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+<section class="doc-section panel">
+  <h2><span class="clause">2</span>采信诊断</h2>
+  <p class="lede">阻断 <span class="mono">{{ blocked }}</span>　提示 <span class="mono">{{ warnings }}</span></p>
+  {% if quarantine %}
+  <div class="wrap-scroll">
+    <table>
+      <thead>
+        <tr><th>行</th><th>表</th><th>列</th><th>原因</th><th>阻断</th><th>明细</th></tr>
+      </thead>
+      <tbody>
+        {% for item in quarantine %}
+        <tr>
+          <td class="num">{{ item.line }}</td>
+          <td class="name">{{ item.table or '—' }}</td>
+          <td class="name">{{ item.column or '—' }}</td>
+          <td class="reason"><span class="code">{{ item.reason|reason }}</span></td>
+          <td>{% if item.blocking %}<span class="st st-bad">是</span>{% else %}<span class="st st-warn">否</span>{% endif %}</td>
+          <td class="truncate" title="{{ item.detail }}">{{ item.detail or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="empty">没有诊断行。</p>
+  {% endif %}
+</section>
+
+<aside class="notes">
+  <ol class="footnotes">
+    <li id="fn1">按 field_id 对齐，改名不算新字段。<a class="back" href="#main">↩</a></li>
+    <li id="fn2">阻断行不进判定，提示行照常参算。<a class="back" href="#main">↩</a></li>
+  </ol>
+</aside>
+{% endblock %}

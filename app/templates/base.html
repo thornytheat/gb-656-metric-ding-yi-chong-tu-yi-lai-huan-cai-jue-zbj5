@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}metricgraph{% endblock %}</title>
+<link rel="stylesheet" href="/static/theme.css">
+<link rel="stylesheet" href="/static/layout.css">
+<link rel="stylesheet" href="/static/components.css">
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<header class="masthead">
+  <div class="mast-brand">metricgraph</div>
+  <dl class="mast-run">
+    <div><dt>批次</dt><dd>{{ run_id }}</dd></div>
+    <div><dt>版本</dt><dd>{{ version_old }} → {{ version_label }}</dd></div>
+    <div><dt>生成</dt><dd>{{ generated_at }}</dd></div>
+    <div><dt>规则集</dt><dd>{{ ruleset }}</dd></div>
+  </dl>
+  <nav class="toc" aria-label="页面">
+    {% for item in nav %}
+    <a href="{{ item.href }}"{% if item.slug == active %} class="is-current" aria-current="page"{% endif %}>{{ item.label }}</a>
+    {% endfor %}
+  </nav>
+</header>
+<main id="main">
+{% block body %}{% endblock %}
+</main>
+<footer class="colophon">
+  <span>{{ ruleset }}</span>
+  <span>生效区间 {{ window_semantics }}</span>
+</footer>
+<script src="/static/app.js"></script>
+<script src="/static/table.js"></script>
+<script src="/static/footnote.js"></script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+{
+  "registered_at": "2026-09-02T03:00:00Z",
+  "consumers": [
+    {
+      "name": "dw.mv_order_daily",
+      "kind": "view",
+      "sql": "select o.order_id, o.order_no, o.order_amt from dim_order o where o.order_id > 0",
+      "upstream": [],
+      "downstream": ["dw.task_settle"]
+    },
+    {
+      "name": "dw.mv_order_stat",
+      "kind": "view",
+      "sql": "select o.status, o.order_id, o.ord_no from dim_order o where o.ord_no is not null",
+      "upstream": ["dw.mv_order_daily"],
+      "downstream": []
+    },
+    {
+      "name": "dw.mv_pay_daily",
+      "kind": "view",
+      "sql": "select p.pay_id, p.pay_amt, p.channel from fct_pay p",
+      "upstream": ["dw.mv_user_dim"],
+      "downstream": ["dw.mv_user_dim"]
+    },
+    {
+      "name": "dw.task_settle",
+      "kind": "task",
+      "sql": "select u.user_id, u.user_name, u.created_at from dim_user u",
+      "upstream": ["dw.mv_order_daily"],
+      "downstream": ["ads.rpt_pay_channel"]
+    },
+    {
+      "name": "dw.mv_user_dim",
+      "kind": "view",
+      "sql": "select u.user_id, u.user_name from dim_user u",
+      "upstream": ["dw.mv_pay_daily"],
+      "downstream": ["dw.mv_pay_daily"]
+    },
+    {
+      "name": "ads.rpt_pay_channel",
+      "kind": "view",
+      "sql": "select p.pay_id, p.channel from fct_pay p",
+      "upstream": [],
+      "downstream": []
+    },
+    {
+      "name": "dw.task_self",
+      "kind": "task",
+      "sql": "select o.order_id from dim_order o",
+      "upstream": ["dw.task_self"],
+      "downstream": ["dw.task_self"]
+    }
+  ]
+}

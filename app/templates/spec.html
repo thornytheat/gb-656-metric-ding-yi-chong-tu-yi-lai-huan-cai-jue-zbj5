@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}迁移单 · metricgraph{% endblock %}
+{% block body %}
+<section class="doc-section">
+  <h1>迁移单</h1>
+  <p class="lede">条款 <span class="mono">{{ clauses|length }}</span>　破坏 <span class="mono">{{ ledger.counts.breaking or 0 }}</span>　断链 <span class="mono">{{ ledger.counts.refs_broken or 0 }}</span></p>
+  <div class="actions">
+    <a class="btn" href="/api/export/spec.md">迁移单 MD</a>
+    <a class="btn ghost" href="/api/export/fields.csv">字段账 CSV</a>
+    <a class="btn ghost" href="/api/export/refs.csv">引用账 CSV</a>
+    <a class="btn ghost" href="/api/export/ledger.csv">账目 CSV</a>
+    <a class="btn ghost" href="/api/export/manifest.json">运行清单</a>
+  </div>
+
+  {% if empty %}
+  <p class="empty">还没有批次。</p>
+  {% elif clauses %}
+  {% for item in clauses %}
+  <article class="spec-clause">
+    <h3><span class="mono">{{ item.no }}</span> {{ item.table }}.{{ item.old_name or '—' }} → {{ item.new_name or '—' }}</h3>
+    <p class="meta">原因 <span class="mono">{{ item.primary }}</span>（{{ item.primary_label }}）</p>
+    <p class="meta">类型 <span class="mono">{{ item.old_type or '—' }} → {{ item.new_type or '—' }}</span>　变化 {{ item.change }}</p>
+    <p class="meta">读者 {% if item.reader_ok %}通过{% else %}不通过{% endif %}　写者 {% if item.writer_ok %}通过{% else %}不通过{% endif %}　引用 {{ item.ref_count }} 处</p>
+  </article>
+  {% endfor %}
+  {% else %}
+  <p class="empty">没有破坏项。</p>
+  {% endif %}
+</section>
+
+<section class="doc-section">
+  <h2><span class="clause">4</span>映射 SQL</h2>
+  {% if aliases %}
+  <pre>{% for item in aliases %}{{ item.sql }}  -- {{ item.table }}
+{% endfor %}</pre>
+  {% else %}
+  <p class="empty">没有改名。</p>
+  {% endif %}
+</section>
+
+<section class="doc-section">
+  <h2><span class="clause">6</span>回滚</h2>
+  <ol class="rollback">
+    <li>先建兼容视图，旧名字继续可读。</li>
+    <li>破坏项补默认值或换回原类型，再跑一次。</li>
+    <li>版本切回上一版，端点保持左闭右开。</li>
+  </ol>
+  {% if warnings %}
+  <p class="lede">警告 <span class="mono">{{ warnings|length }}</span></p>
+  {% endif %}
+</section>
+
+<aside class="notes">
+  <ol class="footnotes">
+    <li>条款号与导出的 Markdown 一致。<a class="back" href="#main">↩</a></li>
+    <li>账目差额不为 0 说明判定漏项。<a class="back" href="#main">↩</a></li>
+  </ol>
+</aside>
+{% endblock %}

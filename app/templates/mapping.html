@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}字段映射 · metricgraph{% endblock %}
+{% block body %}
+<section class="doc-section">
+  <h1>字段映射</h1>
+  <p class="lede">改名 <span class="mono">{{ stats.renamed or 0 }}</span>　冲突 <span class="mono">{{ stats.conflicts or 0 }}</span>　新增 <span class="mono">{{ stats.added or 0 }}</span>　删除 <span class="mono">{{ stats.deleted or 0 }}</span></p>
+  {% if empty %}
+  <p class="empty">还没有批次。</p>
+  {% else %}
+  <div class="wrap-scroll">
+    <table>
+      <caption>旧名到新名</caption>
+      <thead>
+        <tr><th>表</th><th>旧名</th><th>新名</th><th>类型</th><th>映射</th><th>结论</th></tr>
+      </thead>
+      <tbody>
+        {% for row in mapping.get('rows', []) %}
+        <tr>
+          <td class="name">{{ row.table }}</td>
+          <td class="name">{{ row.old_name }}</td>
+          <td class="name">{{ row.new_name }}</td>
+          <td class="name">{{ row.old_type }} → {{ row.new_type }}</td>
+          <td>
+            {% if row.status == 'conflict' %}<span class="st st-bad">冲突</span>
+            {% elif row.status == 'renamed' %}<span class="st st-warn">改名</span>
+            {% else %}<span class="st st-info">同名</span>{% endif %}
+          </td>
+          <td class="reason"><span class="code">{{ row.primary|reason }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+<section class="doc-section">
+  <h2><span class="clause">2</span>别名 SQL</h2>
+  {% if aliases %}
+  <pre>{% for item in aliases %}{{ item.sql }}  -- {{ item.table }}
+{% endfor %}</pre>
+  {% else %}
+  <p class="empty">没有改名。</p>
+  {% endif %}
+</section>
+
+<section class="doc-section">
+  <h2><span class="clause">3</span>冲突与增减</h2>
+  <div class="split">
+    <div>
+      <h3>冲突</h3>
+      {% if mapping.get('conflicts') %}
+      <table>
+        <thead><tr><th>表</th><th>旧名</th><th>新名</th><th>原因</th></tr></thead>
+        <tbody>
+          {% for item in mapping.get('conflicts') %}
+          <tr>
+            <td class="name">{{ item.table }}</td>
+            <td class="name">{{ item.old_names|join(' / ') }}</td>
+            <td class="name">{{ item.new_name }}</td>
+            <td class="reason"><span class="code">{{ item.reason|reason }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="empty">没有冲突。</p>
+      {% endif %}
+    </div>
+    <div>
+      <h3>新增与删除</h3>
+      <table>
+        <thead><tr><th>表</th><th>字段</th><th>动作</th></tr></thead>
+        <tbody>
+          {% for item in mapping.get('added', []) %}
+          <tr><td class="name">{{ item.table }}</td><td class="name">{{ item.name }}</td><td><span class="st st-info">新增</span></td></tr>
+          {% endfor %}
+          {% for item in mapping.get('deleted', []) %}
+          <tr><td class="name">{{ item.table }}</td><td class="name">{{ item.name }}</td><td><span class="st st-bad">删除</span></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<aside class="notes">
+  <ol class="footnotes">
+    <li>改名只按 field_id 认，同名的可能是别人。<a class="back" href="#main">↩</a></li>
+  </ol>
+</aside>
+{% endblock %}

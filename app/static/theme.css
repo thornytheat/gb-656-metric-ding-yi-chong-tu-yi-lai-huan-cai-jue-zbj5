@@ -1,0 +1,32 @@
+/* metricgraph 主题变量：L6 流水线看板 · 浅灰底 + 青绿主色 · 中等密度 · 6px 圆角 */
+:root {
+  --bg: #f4f5f2;
+  --surface: #ffffff;
+  --surface-2: #eceee9;
+  --surface-3: #f8faf7;
+  --ink: #16211f;
+  --ink-muted: #5b6663;
+  --ink-faint: #8b958f;
+  --line: #d9ded8;
+  --line-strong: #b7c0b9;
+  --accent: #0f766e;
+  --accent-soft: #d8ece8;
+  --accent-ink: #ffffff;
+  --ok: #157f52;
+  --warn: #a8690c;
+  --bad: #b3261e;
+  --info: #2a5f8f;
+  --radius: 6px;
+  --radius-sm: 3px;
+  --radius-pill: 999px;
+  --pad: 16px;
+  --pad-sm: 8px;
+  --gap: 12px;
+  --font-ui: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --font-num: "SF Mono", ui-monospace, "Menlo", monospace;
+  --font-mono: "SF Mono", ui-monospace, "Menlo", monospace;
+  --shadow: none;
+  --stage-line: #c6d2cb;
+  --focus: #0f766e;
+  --line-height: 1.55;
+}

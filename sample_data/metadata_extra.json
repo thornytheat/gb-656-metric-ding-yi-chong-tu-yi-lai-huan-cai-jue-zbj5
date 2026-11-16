@@ -1,0 +1,15 @@
+{
+  "version": "v2026_10",
+  "tables": [
+    {
+      "table": "fct_pay",
+      "fields": [
+        {"field_id": 9007199254740993, "name": "pay_id", "type": "bigint", "required": "Y"},
+        {"field_id": 2003, "name": "pay_amt", "type": "decimal(18,2)", "required": true},
+        {"field_id": 2003, "name": "pay_amt_dup", "type": "decimal(18,2)", "required": "N"},
+        {"field_id": null, "name": "pay_channel", "type": "varchar(8)", "required": "?"},
+        {"field_id": 2010, "name": "geo_area", "type": "geography", "required": "N"}
+      ]
+    }
+  ]
+}

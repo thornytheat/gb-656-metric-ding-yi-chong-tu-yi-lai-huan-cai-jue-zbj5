@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}影响面 · metricgraph{% endblock %}
+{% block body %}
+<section class="doc-section">
+  <h1>影响面</h1>
+  <p class="lede">下游 <span class="mono">{{ summary.consumers or 0 }}</span>　受影响 <span class="mono">{{ graph.total or 0 }}</span>　环 <span class="mono">{{ summary.cycles or 0 }}</span>　断链 <span class="mono">{{ summary.broken or 0 }}</span></p>
+  {% if empty %}
+  <p class="empty">还没有批次。</p>
+  {% else %}
+  <div class="wrap-scroll">
+    <table>
+      <caption>受影响节点<sup class="fn">1</sup></caption>
+      <thead>
+        <tr><th>节点</th><th>类型</th><th class="num">深度</th><th>入口</th><th>依据</th></tr>
+      </thead>
+      <tbody>
+        {% for row in graph.get('rows', []) %}
+        <tr>
+          <td class="name">{{ row.name }}</td>
+          <td>{{ row.kind }}</td>
+          <td class="num">{{ row.depth }}</td>
+          <td class="name">{{ row.via|via }}</td>
+          <td class="reason">{{ row.fields|join('，') or '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5">没有受影响节点。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+<section class="doc-section">
+  <h2><span class="clause">2</span>环与自引用</h2>
+  {% if cycles.get('cycles') or cycles.get('self_loops') %}
+  <table>
+    <thead><tr><th>节点</th><th class="num">长度</th><th>原因</th></tr></thead>
+    <tbody>
+      {% for item in cycles.get('cycles', []) %}
+      <tr><td class="name">{{ item.nodes|join(' → ') }}</td><td class="num">{{ item.length }}</td><td class="reason"><span class="code">{{ item.reason|reason }}</span></td></tr>
+      {% endfor %}
+      {% for item in cycles.get('self_loops', []) %}
+      <tr><td class="name">{{ item.node }}</td><td class="num">1</td><td class="reason"><span class="code">{{ item.reason|reason }}</span></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">没有环。</p>
+  {% endif %}
+</section>
+
+<section class="doc-section">
+  <h2><span class="clause">3</span>断链与单边</h2>
+  <div class="split">
+    <div>
+      <h3>断链</h3>
+      {% if broken %}
+      <table>
+        <thead><tr><th>节点</th><th>引用</th><th>明细</th></tr></thead>
+        <tbody>
+          {% for item in broken %}
+          <tr>
+            <td class="name">{{ item.consumer }}</td>
+            <td class="name">{{ item.ref }}</td>
+            <td class="reason">{{ item.detail or item.via }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="empty">没有断链。</p>
+      {% endif %}
+    </div>
+    <div>
+      <h3>单边登记</h3>
+      {% if one_sided %}
+      <table>
+        <thead><tr><th>上游</th><th>下游</th><th>缺失</th></tr></thead>
+        <tbody>
+          {% for item in one_sided %}
+          <tr>
+            <td class="name">{{ item.upstream }}</td>
+            <td class="name">{{ item.downstream }}</td>
+            <td class="reason">{{ item.missing }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="empty">没有单边。</p>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<aside class="notes">
+  <ol class="footnotes">
+    <li>深度按最短跳数算，同名节点只出现一次。<a class="back" href="#main">↩</a></li>
+    <li>断链节点按直接受影响计入。<a class="back" href="#main">↩</a></li>
+  </ol>
+</aside>
+{% endblock %}

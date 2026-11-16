@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}类型与兼容 · metricgraph{% endblock %}
+{% block body %}
+<section class="doc-section">
+  <h1>类型与兼容</h1>
+  <p class="lede">类型格 <span class="mono">{{ grid|length }}</span> 行　破坏 <span class="mono">{{ verdicts.get('BREAKING', 0) }}</span></p>
+  <div class="wrap-scroll">
+    <table class="grid-table">
+      <caption>类型格<sup class="fn">1</sup></caption>
+      <thead>
+        <tr><th>类型</th><th>族</th><th class="num">下界</th><th class="num">上界</th><th class="num">刻度</th></tr>
+      </thead>
+      <tbody>
+        {% for row in grid %}
+        <tr>
+          <td class="name" title="精确整数上界 {{ row.exact }}">{{ row.label }}</td>
+          <td>{{ row.super }}</td>
+          <td class="num">{{ row.lo }}</td>
+          <td class="num">{{ row.hi }}</td>
+          <td class="num">{{ row.quantum }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="doc-section">
+  <h2><span class="clause">2</span>两向判定</h2>
+  <div class="pair">
+    <div>
+      <label for="old-type">旧类型</label>
+      <input type="text" id="old-type" name="old" value="decimal(18,2)" autocomplete="off">
+    </div>
+    <div>
+      <label for="new-type">新类型</label>
+      <input type="text" id="new-type" name="new" value="decimal(20,4)" autocomplete="off">
+    </div>
+    <button type="button" data-action="compare-types">比较</button>
+    <span class="flash" data-flash></span>
+  </div>
+  <p class="lede" data-compare-result>—</p>
+
+  {% if empty %}
+  <p class="empty">还没有批次。</p>
+  {% else %}
+  <div class="wrap-scroll">
+    <table>
+      <caption>字段判定</caption>
+      <thead>
+        <tr><th>表</th><th>字段</th><th>类型变化</th><th>读者</th><th>写者</th><th>结论</th><th>原因</th></tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td class="name">{{ row.table }}</td>
+          <td class="name">{{ row.old_name or row.new_name }}</td>
+          <td class="name" title="{{ row.type_detail or '' }}">{{ row.old_type or '—' }} → {{ row.new_type or '—' }}</td>
+          <td>{% if row.reader_ok %}<span class="st st-ok">通过</span>{% else %}<span class="st st-bad">不通过</span>{% endif %}</td>
+          <td>{% if row.writer_ok %}<span class="st st-ok">通过</span>{% else %}<span class="st st-bad">不通过</span>{% endif %}</td>
+          <td>
+            {% if row.verdict == 'BREAKING' %}<span class="st st-bad">破坏</span>
+            {% elif row.verdict == 'COMPATIBLE_BY_MAPPING' %}<span class="st st-warn">别名</span>
+            {% else %}<span class="st st-ok">兼容</span>{% endif %}
+          </td>
+          <td class="reason"><span class="code">{{ row.primary|reason }}</span>{% if row.type_detail %} · {{ row.type_detail|narrow }}{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+<aside class="notes">
+  <ol class="footnotes">
+    <li>放宽指新类型能装下旧取值的全部值。<a class="back" href="#main">↩</a></li>
+    <li>刻度按十进制算，不收窄就算兼容。<a class="back" href="#main">↩</a></li>
+  </ol>
+</aside>
+{% endblock %}

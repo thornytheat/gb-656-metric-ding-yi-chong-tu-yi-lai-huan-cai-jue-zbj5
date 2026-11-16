@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}版本历史 · metricgraph{% endblock %}
+{% block body %}
+<section class="doc-section">
+  <h1>版本历史</h1>
+  <p class="lede">批次 <span class="mono">{{ runs|length }}</span>　当前序号 <span class="mono">{{ current_seq }}</span></p>
+  <div class="actions">
+    <button type="button" data-action="run">跑一次</button>
+    <button type="button" class="ghost" data-action="run" data-force-stale="1">陈旧提交</button>
+    <a class="btn ghost" href="/api/reconcile">对账 JSON</a>
+    <span class="flash" data-flash></span>
+  </div>
+
+  {% if runs %}
+  <div class="wrap-scroll">
+    <table>
+      <caption>运行清单<sup class="fn">1</sup></caption>
+      <thead>
+        <tr>
+          <th>批次</th><th class="num">序号</th><th>版本</th><th>生效起</th>
+          <th class="num">字段</th><th class="num">破坏</th><th class="num">断链</th><th>账</th><th>生成</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in runs %}
+        <tr>
+          <td class="name">{{ item.run_id }}</td>
+          <td class="num">{{ item.version_seq }}</td>
+          <td class="name">{{ item.version_label_old }} → {{ item.version_label_new }}</td>
+          <td class="name">{{ item.effective_from|day }}</td>
+          <td class="num">{{ item.old_total }}/{{ item.new_total }}</td>
+          <td class="num">{{ item.breaking }}</td>
+          <td class="num">{{ item.refs_broken }}</td>
+          <td>{% if item.balanced %}<span class="st st-ok">平</span>{% else %}<span class="st st-bad">不平</span>{% endif %}</td>
+          <td class="name">{{ item.created_at|day }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="empty">还没有批次。</p>
+  {% endif %}
+</section>
+
+<section class="doc-section">
+  <h2><span class="clause">2</span>对账</h2>
+  {% if empty %}
+  <p class="empty">还没有批次。</p>
+  {% else %}
+  <dl class="ledger">
+    <div><dt>旧版本字段</dt><dd>{{ ledger.fields.old_total }}<span class="unit">个</span></dd></div>
+    <div><dt>未变</dt><dd>{{ ledger.buckets.unchanged }}<span class="unit">个</span></dd></div>
+    <div><dt>改名</dt><dd>{{ ledger.buckets.renamed }}<span class="unit">个</span></dd></div>
+    <div><dt>换类型</dt><dd>{{ ledger.buckets.retyped }}<span class="unit">个</span></dd></div>
+    <div><dt>改必填</dt><dd>{{ ledger.buckets.required }}<span class="unit">个</span></dd></div>
+    <div><dt>冲突</dt><dd>{{ ledger.buckets.conflict }}<span class="unit">个</span></dd></div>
+    <div><dt>删除</dt><dd>{{ ledger.buckets.deleted }}<span class="unit">个</span></dd></div>
+    <div><dt>新增</dt><dd>{{ ledger.buckets.added }}<span class="unit">个</span></dd></div>
+    <div><dt>新版本字段</dt><dd>{{ ledger.fields.new_total }}<span class="unit">个</span></dd></div>
+    <div><dt>旧侧差额</dt><dd>{{ ledger.fields.old_gap }}<span class="unit">个</span></dd></div>
+    <div><dt>新侧差额</dt><dd>{{ ledger.fields.new_gap }}<span class="unit">个</span></dd></div>
+    <div><dt>登记引用</dt><dd>{{ ledger.refs.refs_total }}<span class="unit">处</span></dd></div>
+    <div><dt>可达</dt><dd>{{ ledger.refs.reachable }}<span class="unit">处</span></dd></div>
+    <div><dt>断链</dt><dd>{{ ledger.refs.broken }}<span class="unit">处</span></dd></div>
+    <div><dt>经别名</dt><dd>{{ ledger.refs.aliased }}<span class="unit">处</span></dd></div>
+    <div><dt>引用差额</dt><dd>{{ ledger.refs.gap }}<span class="unit">处</span></dd></div>
+  </dl>
+  <p class="lede">生效区间 {{ reconcile.window.from|day }} 起，末端{{ '开' if not reconcile.window.to else '闭' }}<sup class="fn">2</sup></p>
+  {% endif %}
+</section>
+
+<section class="doc-section">
+  <h2><span class="clause">3</span>警告</h2>
+  {% if run and run.get('warnings') %}
+  <table>
+    <thead><tr><th>原因</th><th>明细</th></tr></thead>
+    <tbody>
+      {% for item in run.get('warnings') %}
+      <tr><td class="reason"><span class="code">{{ item.code|reason }}</span></td><td>{{ item.detail }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">没有警告。</p>
+  {% endif %}
+</section>
+
+<aside class="notes">
+  <ol class="footnotes">
+    <li>同输入重跑命中批次键，不新增行。<a class="back" href="#main">↩</a></li>
+    <li>区间左闭右开，相邻区间不重叠。<a class="back" href="#main">↩</a></li>
+  </ol>
+</aside>
+{% endblock %}
