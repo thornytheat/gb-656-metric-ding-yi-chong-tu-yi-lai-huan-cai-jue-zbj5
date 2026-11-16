@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}指标依赖 · metricgraph{% endblock %}
+{% block body %}
+<section class="doc-section">
+  <h1>指标依赖</h1>
+  <p class="lede">当前序号 <span class="mono">{{ current_seq }}</span>　裁决 <span class="mono">{{ runs|length }}</span>　角色 <span class="mono">{{ role }}</span>　链 <span class="mono">{{ runs|length and (view.counts.chains or 0) or 0 }}</span></p>
+
+  <div class="actions">
+    <form method="get" action="/metrics" class="pair">
+      <label for="audit-token">审计凭据</label>
+      <input type="text" id="audit-token" name="audit_token" value="{{ token }}" autocomplete="off" placeholder="未授权留空">
+      <button type="submit">切换视图</button>
+    </form>
+    <span class="flash" data-flash></span>
+  </div>
+  <p class="notice">授权范围：可见 {{ scope.visible|join('、') }}；屏蔽 {{ scope.redacted|join('、') or '无' }}。</p>
+  {% if error %}<p class="notice">{{ error }}</p>{% endif %}
+
+  {% if runs %}
+  <div class="wrap-scroll">
+    <table>
+      <caption>裁决版本</caption>
+      <thead>
+        <tr><th>批次</th><th class="num">序号</th><th>输入版本</th><th>上一版</th>
+            <th class="num">指标</th><th class="num">阻断</th><th class="num">链</th><th>状态</th><th>结论</th></tr>
+      </thead>
+      <tbody>
+        {% for item in runs %}
+        <tr>
+          <td class="name"><a href="/metrics?run_id={{ item.run_id }}{% if token %}&amp;audit_token={{ token }}{% endif %}">{{ item.run_id }}</a></td>
+          <td class="num">{{ item.version_seq }}</td>
+          <td class="name">{{ item.input_version }}</td>
+          <td class="name">{{ item.parent_run_id or '—' }}</td>
+          <td class="num">{{ item.metrics_total }}</td>
+          <td class="num">{{ item.block }}</td>
+          <td class="num">{{ item.chains }}</td>
+          <td>{% if item.status == 'ready' %}<span class="st st-ok">已发布</span>{% else %}<span class="st st-warn">写入中</span>{% endif %}</td>
+          <td>{% if item.overall == 'BLOCK' %}<span class="st st-bad">阻断</span>{% elif item.overall == 'WARN' %}<span class="st st-warn">复核</span>{% elif item.overall == 'PASS' %}<span class="st st-ok">通过</span>{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if empty %}
+  <p class="empty">还没有指标裁决。</p>
+  {% elif not ready %}
+  <p class="empty">裁决 <span class="mono">{{ run.run_id }}</span> 写入未完成，已完成 {{ run.progress.done|length }}/5 阶段{% if run.progress.data.definitions %}，定义检查点已落盘{% endif %}，可续跑。</p>
+  <form method="post" action="/metrics/resume/{{ run.run_id }}" class="actions">
+    <button type="submit">续跑</button>
+  </form>
+  {% else %}
+  <dl class="ledger">
+    <div><dt>批次</dt><dd class="mono">{{ run.run_id }}</dd></div>
+    <div><dt>输入版本</dt><dd class="mono">{{ run.input_version }}</dd></div>
+    <div><dt>谱系</dt><dd class="mono">{{ run.lineage_id }}</dd></div>
+    <div><dt>上一版</dt><dd class="mono">{{ run.parent_run_id or '—' }}</dd></div>
+    <div><dt>定义摘要</dt><dd class="mono">{{ run.input_sha256[:12] }}</dd></div>
+    <div><dt>结论</dt><dd><span class="st {{ 'st-bad' if view.overall == 'BLOCK' else ('st-warn' if view.overall == 'WARN' else 'st-ok') }}">{{ view.overall }}</span></dd></div>
+  </dl>
+
+  {% if view.redacted %}
+  <p class="notice">未授权视图只给匿名链路，指标名与公式不下发。<sup class="fn">1</sup></p>
+  {% endif %}
+
+  <div class="wrap-scroll">
+    <table>
+      <caption>受影响链路</caption>
+      <thead>
+        <tr><th>锚点</th><th>原因</th><th class="num">深度</th><th>角色</th><th>节点</th><th>入口</th></tr>
+      </thead>
+      <tbody>
+        {% for chain in view.get('chains', []) %}
+          {% for node in chain.nodes %}
+          <tr>
+            <td class="name">{{ chain.anchor }}</td>
+            <td class="reason">{{ chain.reasons|join('，') or '—' }}</td>
+            <td class="num">{{ node.depth }}</td>
+            <td>{{ node.role }}</td>
+            <td class="name">{{ node.anon if view.redacted else node.name }}</td>
+            <td class="name">{{ node.via or '—' }}</td>
+          </tr>
+          {% endfor %}
+        {% else %}
+        <tr><td colspan="6">没有受影响链路。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <p class="lede">计数：定义 <span class="mono">{{ view.counts.definitions }}</span>　指标 <span class="mono">{{ view.counts.metrics_total }}</span>　通过 <span class="mono">{{ view.counts.pass }}</span>　复核 <span class="mono">{{ view.counts.warn }}</span>　阻断 <span class="mono">{{ view.counts.block }}</span>　环 <span class="mono">{{ view.counts.cycles }}</span>　缺依赖 <span class="mono">{{ view.counts.broken_deps }}</span>　受影响 <span class="mono">{{ view.counts.affected }}</span></p>
+  {% endif %}
+</section>
+
+{% if not empty and ready %}
+<section class="doc-section">
+  <h2><span class="clause">2</span>指标明细</h2>
+  {% if view.redacted %}
+  <p class="empty">指标名与公式需要审计授权。<sup class="fn">2</sup></p>
+  {% else %}
+  <div class="wrap-scroll">
+    <table>
+      <thead>
+        <tr><th>指标</th><th>版本</th><th>公式</th><th>依赖</th><th>状态</th><th>原因</th></tr>
+      </thead>
+      <tbody>
+        {% for row in view.get('metrics', []) %}
+        <tr>
+          <td class="name">{{ row.name }}</td>
+          <td class="name">{{ row.version }}</td>
+          <td class="name">{{ row.expression }}</td>
+          <td class="name">{{ row.depends_on|join('，') or '—' }}</td>
+          <td>{% if row.status == 'BLOCK' %}<span class="st st-bad">阻断</span>{% elif row.status == 'WARN' %}<span class="st st-warn">复核</span>{% else %}<span class="st st-ok">通过</span>{% endif %}</td>
+          <td class="reason">{{ row.reasons|join('，') or '—' }}</td>
+        </tr>
+        {% endfor %}
+        {% for row in view.get('removed', []) %}
+        <tr>
+          <td class="name">{{ row.name }}</td>
+          <td class="name">—</td>
+          <td class="name">—</td>
+          <td class="name">—</td>
+          <td><span class="st st-warn">已移除</span></td>
+          <td class="reason">{{ row.reasons|join('，') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+<section class="doc-section">
+  <h2><span class="clause">3</span>冲突与环</h2>
+  {% if view.get('conflicts') or view.get('cycles') or view.get('self_loops') or view.get('broken_deps') or view.get('duplicates') %}
+  <table>
+    <thead><tr><th>类别</th><th>对象</th><th>原因</th></tr></thead>
+    <tbody>
+      {% for item in view.get('conflicts', []) %}
+      <tr><td>定义冲突</td><td class="name">{{ item.anon if view.redacted else item.name }}</td><td class="reason">{{ item.reason }}</td></tr>
+      {% endfor %}
+      {% for item in view.get('duplicates', []) %}
+      <tr><td>重复登记</td><td class="name">{{ item.anon if view.redacted else item.name }}</td><td class="reason">{{ item.definition_count }} 份同签名</td></tr>
+      {% endfor %}
+      {% for item in view.get('cycles', []) %}
+      <tr><td>依赖环</td><td class="name">{{ item.nodes|join(' → ') }}</td><td class="reason">{{ item.reason }}</td></tr>
+      {% endfor %}
+      {% for item in view.get('self_loops', []) %}
+      <tr><td>自引用</td><td class="name">{{ item }}</td><td class="reason">METRIC_CYCLE</td></tr>
+      {% endfor %}
+      {% for item in view.get('broken_deps', []) %}
+      <tr><td>缺依赖</td><td class="name">{{ item.metric }} → {{ item.dependency }}</td><td class="reason">{{ item.reason }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">没有冲突、环或缺失依赖。</p>
+  {% endif %}
+</section>
+
+<section class="doc-section">
+  <h2><span class="clause">4</span>导出</h2>
+  <div class="actions">
+    <a class="btn ghost" href="/api/export/chains.csv?run_id={{ run.run_id }}{% if token %}&amp;audit_token={{ token }}{% endif %}">链路 CSV</a>
+    <a class="btn ghost" href="/api/export/metrics.csv?run_id={{ run.run_id }}{% if token %}&amp;audit_token={{ token }}{% endif %}">指标 CSV</a>
+    <a class="btn ghost" href="/api/export/metrics-manifest.json?run_id={{ run.run_id }}">运行清单</a>
+    {% if role == 'auditor' %}
+    <a class="btn ghost" href="/api/export/metrics.md?run_id={{ run.run_id }}&amp;audit_token={{ token }}">裁决摘要 MD</a>
+    <a class="btn ghost" href="/api/export/metrics.conflicts.csv?run_id={{ run.run_id }}&amp;audit_token={{ token }}">冲突 CSV</a>
+    {% endif %}
+  </div>
+  <p class="lede">导出与所选版本 <span class="mono">{{ run.run_id }}</span>（输入版本 {{ run.input_version }}）一致。</p>
+</section>
+
+{% if role == 'auditor' %}
+<section class="doc-section">
+  <h2><span class="clause">5</span>审计日志</h2>
+  {% if audit %}
+  <div class="wrap-scroll">
+    <table>
+      <thead><tr><th>时间</th><th>动作</th><th>结果</th><th>角色</th><th>凭据摘要</th></tr></thead>
+      <tbody>
+        {% for item in audit %}
+        <tr>
+          <td class="name">{{ item.created_at|ts }}</td>
+          <td>{{ item.action }}</td>
+          <td>{{ item.outcome }}</td>
+          <td>{{ item.role }}</td>
+          <td class="name">{{ item.token_fp or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="empty">没有审计事件。</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endif %}
+
+<aside class="notes">
+  <ol class="footnotes">
+    <li>匿名编号按指标名摘要生成，跨版本稳定，便于对照链路。<a class="back" href="#main">↩</a></li>
+    <li>未授权只给匿名链路；授权审计才可看指标名与公式。<a class="back" href="#main">↩</a></li>
+    <li>同一输入重试命中批次键，不新增结果；修订生成新裁决并保留旧版。<a class="back" href="#main">↩</a></li>
+  </ol>
+</aside>
+{% endblock %}

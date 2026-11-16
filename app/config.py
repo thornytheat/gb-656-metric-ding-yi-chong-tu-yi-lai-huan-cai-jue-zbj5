@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from datetime import datetime, timedelta, timezone
@@ -95,6 +96,29 @@ WINDOW_SEMANTICS = "[start, end)"
 # 影响面最多展开层数，防止异常登记把页面拖死
 MAX_IMPACT_DEPTH = 8
 
+# ---------- 指标依赖裁决 ----------
+# 指标批次绑定输入版本：一条批次键对应一组输入摘要，修订后是新键而不是覆盖旧键
+METRIC_BATCH_PARAMS_LIMIT = 12
+
+# 审计角色：未授权只给匿名链路；授权审计才可看指标名与公式
+AUDIT_ROLE = "auditor"
+VIEWER_ROLE = "viewer"
+
+# 审计凭据可在请求头 X-Audit-Token 或查询参数 audit_token 里给
+AUDIT_TOKEN_ENV = "METRICGRAPH_AUDIT_TOKEN"
+DEFAULT_AUDIT_TOKEN = "audit-local"
+
+# 裁决写入状态：pending 表示有输入版本已绑定但结果尚未发布
+VERDICT_READY = "ready"
+VERDICT_PENDING = "pending"
+
+# 依赖环 / 断链 / 授权的判定出口只有这些，页面与导出共用
+VERDICT_CODES = ("PASS", "WARN", "BLOCK")
+
+# 指标依赖裁决的样例与谱系
+METRIC_SAMPLE = "metrics_v2026_09.json"
+METRIC_SAMPLE_LINEAGE = "published-metrics"
+
 
 def resolve_sample(name: str) -> Path:
     """把样例文件名限定在 sample_data/ 内，拒绝穿越与绝对路径。"""
@@ -124,6 +148,29 @@ def base_of(type_raw: str) -> str:
 
 def now_utc() -> datetime:
     return datetime.now(tz=UTC)
+
+
+def audit_token() -> str:
+    """审计凭据：环境变量优先，默认值只用于本机演示。"""
+    return os.environ.get(AUDIT_TOKEN_ENV, DEFAULT_AUDIT_TOKEN).strip() or DEFAULT_AUDIT_TOKEN
+
+
+def token_fingerprint(token: str) -> str:
+    """凭据摘要进审计日志，原始凭据不落盘。"""
+    import hashlib
+
+    return hashlib.sha256((token or "").encode("utf-8")).hexdigest()[:16]
+
+
+def parse_params(raw: str | None) -> dict:
+    """批次参数在库里存成 JSON 文本，读回时坏数据返回空对象而不是抛错。"""
+    if not raw:
+        return {}
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return value if isinstance(value, dict) else {}
 
 
 def to_local_text(moment: datetime | None) -> str:

@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}指标依赖 · 越权{% endblock %}
+{% block body %}
+<section class="doc-section">
+  <h1>越权查看被拒</h1>
+  <p class="notice">{{ reason }}</p>
+  <p class="lede">没有审计凭据时，请使用<a href="/metrics">匿名链路视图</a>。</p>
+</section>
+{% endblock %}

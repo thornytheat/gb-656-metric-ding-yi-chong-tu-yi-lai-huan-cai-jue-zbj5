@@ -64,3 +64,11 @@ def run(client):
     from app import store
 
     return store.latest_run()
+
+
+@pytest.fixture()
+def run_verdict(client):
+    """当前指标裁决：内置样例在启动时已经跑过。"""
+    from app import store
+
+    return store.latest_metric_run()

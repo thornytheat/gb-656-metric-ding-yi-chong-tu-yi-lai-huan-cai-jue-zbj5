@@ -48,6 +48,30 @@ class Conflict(FieldmapError):
     label = "记录冲突"
 
 
+class Forbidden(FieldmapError):
+    """越权查看：角色或凭据不足以进入审计视图。"""
+
+    status = 403
+    code = "AUDIT_DENIED"
+    label = "越权查看"
+
+
+class Pending(FieldmapError):
+    """裁决还在写入，尚未发布，不能当作审计凭据读取。"""
+
+    status = 409
+    code = "VERDICT_PENDING"
+    label = "裁决未完成"
+
+
+class WriteInterrupted(FieldmapError):
+    """裁决写入中途被打断；已落盘的部分可续跑。"""
+
+    status = 503
+    code = "WRITE_INTERRUPTED"
+    label = "写入中断"
+
+
 def install(app: FastAPI) -> None:
     @app.exception_handler(FieldmapError)
     async def _handle_domain(_: Request, exc: FieldmapError) -> JSONResponse:

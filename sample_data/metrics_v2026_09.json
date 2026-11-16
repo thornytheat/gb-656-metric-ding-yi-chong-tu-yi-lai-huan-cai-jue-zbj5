@@ -1,0 +1,18 @@
+{
+  "version": "v2026_09",
+  "registered_at": "2026-09-02T00:00:00Z",
+  "definitions": [
+    {"name": "pay_amt", "expression": "sum(pay_fee)", "priority": 10, "source": "finance", "depends_on": ["pay_fee"]},
+    {"name": "refund_amt", "expression": "sum(refund_fee)", "priority": 10, "source": "finance", "depends_on": ["refund_fee"]},
+    {"name": "gmv", "expression": "pay_amt + refund_amt", "priority": 10, "source": "finance", "depends_on": ["pay_amt", "refund_amt"]},
+    {"name": "order_count", "expression": "count(order_id)", "priority": 10, "source": "ops", "depends_on": ["order_id"]},
+    {"name": "coupon_amt", "expression": "sum(coupon_fee)", "priority": 10, "source": "ops", "depends_on": ["coupon_fee"]},
+    {"name": "cycle_a", "expression": "a_value + x", "priority": 10, "source": "ops", "depends_on": ["cycle_b"]},
+    {"name": "cycle_b", "expression": "b_value + y", "priority": 10, "source": "ops", "depends_on": ["cycle_a"]},
+    {"name": "report_daily", "expression": "gmv / order_count", "priority": 10, "source": "bi", "depends_on": ["gmv", "order_count"]},
+    {"name": "dup_metric", "expression": "sum(dup_value)", "priority": 10, "source": "a_team", "depends_on": []},
+    {"name": "dup_metric", "expression": "sum(dup_value)", "priority": 10, "source": "b_team", "depends_on": []},
+    {"name": "disputed", "expression": "sum(alpha)", "priority": 5, "source": "team_alpha", "depends_on": []},
+    {"name": "disputed", "expression": "sum(beta)", "priority": 9, "source": "team_beta", "depends_on": []}
+  ]
+}

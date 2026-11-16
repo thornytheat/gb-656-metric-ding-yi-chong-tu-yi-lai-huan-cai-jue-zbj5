@@ -57,6 +57,39 @@ CREATE TABLE IF NOT EXISTS kv (
     v TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_quarantine_schema ON quarantine(schema_id);
+
+-- 指标依赖裁决：一条批次键绑定一组输入摘要，修订生成新行而不覆盖旧行
+CREATE TABLE IF NOT EXISTS metric_runs (
+    run_id           TEXT PRIMARY KEY,
+    batch_key        TEXT NOT NULL UNIQUE,
+    lineage_id       TEXT NOT NULL,
+    parent_run_id    TEXT,
+    version_seq      INTEGER NOT NULL,
+    input_sha256     TEXT NOT NULL,
+    input_version    TEXT NOT NULL,
+    digests_json     TEXT NOT NULL,
+    input_names_json TEXT NOT NULL,
+    params_json      TEXT NOT NULL,
+    status           TEXT NOT NULL,
+    progress_json    TEXT NOT NULL,
+    result_json      TEXT,
+    created_at       TEXT NOT NULL,
+    updated_at       TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_metric_runs_lineage ON metric_runs(lineage_id, version_seq);
+
+-- 审计日志：只记凭据摘要，原始凭据不落盘
+CREATE TABLE IF NOT EXISTS audit_events (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    run_id     TEXT,
+    action     TEXT NOT NULL,
+    outcome    TEXT NOT NULL,
+    role       TEXT NOT NULL,
+    token_fp   TEXT,
+    detail     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_audit_run ON audit_events(run_id, id);
 """
 
 
@@ -83,7 +116,7 @@ def reset() -> None:
     """测试与重建用：清空全部业务表。"""
     with _LOCK, _connect() as conn:
         conn.executescript(SCHEMA)
-        for table in ("snapshots", "runs", "quarantine", "kv"):
+        for table in ("snapshots", "runs", "quarantine", "kv", "metric_runs", "audit_events"):
             conn.execute(f"DELETE FROM {table}")
 
 
@@ -272,3 +305,179 @@ def get_kv(key: str, default=None):
     with _LOCK, _connect() as conn:
         row = conn.execute("SELECT v FROM kv WHERE k=?", (key,)).fetchone()
     return _loads(row["v"]) if row else default
+
+
+# ---------- 指标裁决批次 ----------
+
+def _metric_row_to_dict(row: sqlite3.Row) -> dict:
+    return {
+        "run_id": row["run_id"],
+        "batch_key": row["batch_key"],
+        "lineage_id": row["lineage_id"],
+        "parent_run_id": row["parent_run_id"],
+        "version_seq": row["version_seq"],
+        "input_sha256": row["input_sha256"],
+        "input_version": row["input_version"],
+        "digests": _loads(row["digests_json"]) or {},
+        "input_names": _loads(row["input_names_json"]) or {},
+        "params": _loads(row["params_json"]) or {},
+        "status": row["status"],
+        "progress": _loads(row["progress_json"]) or {},
+        "result": _loads(row["result_json"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def save_metric_run(run: dict) -> None:
+    """整行写入。裁决中断时 status 仍是 pending，result 为 null。"""
+    with _LOCK, _connect() as conn:
+        conn.execute(
+            """INSERT INTO metric_runs (run_id, batch_key, lineage_id, parent_run_id,
+                   version_seq, input_sha256, input_version, digests_json,
+                   input_names_json, params_json, status, progress_json, result_json,
+                   created_at, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               ON CONFLICT(run_id) DO UPDATE SET
+                   status=excluded.status,
+                   progress_json=excluded.progress_json,
+                   result_json=excluded.result_json,
+                   updated_at=excluded.updated_at""",
+            (
+                run["run_id"], run["batch_key"], run["lineage_id"],
+                run.get("parent_run_id"), int(run["version_seq"]), run["input_sha256"],
+                run["input_version"], _dumps(run.get("digests") or {}),
+                _dumps(run.get("input_names") or {}), _dumps(run.get("params") or {}),
+                run["status"], _dumps(run.get("progress") or {}),
+                _dumps(run["result"]) if run.get("result") is not None else None,
+                run["created_at"], run.get("updated_at") or run["created_at"],
+            ),
+        )
+
+
+def update_metric_progress(run_id: str, status: str, progress: dict) -> None:
+    with _LOCK, _connect() as conn:
+        conn.execute(
+            """UPDATE metric_runs SET status=?, progress_json=?, updated_at=?
+               WHERE run_id=?""",
+            (status, _dumps(progress or {}), _now_text(), run_id),
+        )
+
+
+def metric_run_by_id(run_id: str) -> dict | None:
+    with _LOCK, _connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM metric_runs WHERE run_id=?", (run_id,)
+        ).fetchone()
+    return _metric_row_to_dict(row) if row else None
+
+
+def metric_run_by_key(batch_key: str) -> dict | None:
+    with _LOCK, _connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM metric_runs WHERE batch_key=?", (batch_key,)
+        ).fetchone()
+    return _metric_row_to_dict(row) if row else None
+
+
+def latest_metric_run(lineage_id: str | None = None) -> dict | None:
+    sql = "SELECT * FROM metric_runs"
+    args: tuple = ()
+    if lineage_id:
+        sql += " WHERE lineage_id=?"
+        args = (lineage_id,)
+    sql += " ORDER BY version_seq DESC, run_id LIMIT 1"
+    with _LOCK, _connect() as conn:
+        row = conn.execute(sql, args).fetchone()
+    return _metric_row_to_dict(row) if row else None
+
+
+def list_metric_runs(limit: int = 30, lineage_id: str | None = None) -> list[dict]:
+    sql = "SELECT * FROM metric_runs"
+    args: tuple = ()
+    if lineage_id:
+        sql += " WHERE lineage_id=?"
+        args = (lineage_id,)
+    sql += " ORDER BY version_seq DESC, run_id LIMIT ?"
+    with _LOCK, _connect() as conn:
+        rows = conn.execute(sql, args + (limit,)).fetchall()
+    return [_metric_row_to_dict(row) for row in rows]
+
+
+def count_metric_runs() -> int:
+    with _LOCK, _connect() as conn:
+        row = conn.execute("SELECT COUNT(*) AS n FROM metric_runs").fetchone()
+    return int(row["n"])
+
+
+def next_metric_version_seq() -> int:
+    with _LOCK, _connect() as conn:
+        row = conn.execute(
+            "SELECT COALESCE(MAX(version_seq), 0) AS n FROM metric_runs"
+        ).fetchone()
+    return int(row["n"]) + 1
+
+
+def current_metric_version_seq() -> int:
+    with _LOCK, _connect() as conn:
+        row = conn.execute(
+            "SELECT COALESCE(MAX(version_seq), 0) AS n FROM metric_runs"
+        ).fetchone()
+    return int(row["n"])
+
+
+def superseding_run(batch_key: str) -> dict | None:
+    """同一条谱系里，比给定批次更新的修订（用于判断「陈旧输入」）。"""
+    current = metric_run_by_key(batch_key)
+    if current is None:
+        return None
+    with _LOCK, _connect() as conn:
+        row = conn.execute(
+            """SELECT * FROM metric_runs
+               WHERE lineage_id=? AND version_seq>?
+               ORDER BY version_seq ASC, run_id LIMIT 1""",
+            (current["lineage_id"], int(current["version_seq"])),
+        ).fetchone()
+    return _metric_row_to_dict(row) if row else None
+
+
+# ---------- 审计日志 ----------
+
+def append_audit(run_id: str | None, action: str, outcome: str, role: str,
+                 token_fp: str | None, detail: str = "") -> None:
+    with _LOCK, _connect() as conn:
+        conn.execute(
+            """INSERT INTO audit_events (created_at, run_id, action, outcome, role,
+                   token_fp, detail) VALUES (?,?,?,?,?,?,?)""",
+            (_now_text(), run_id, action, outcome, role, token_fp, detail),
+        )
+
+
+def list_audit(run_id: str | None = None, limit: int = 100) -> list[dict]:
+    sql = "SELECT * FROM audit_events"
+    args: tuple = ()
+    if run_id:
+        sql += " WHERE run_id=?"
+        args = (run_id,)
+    sql += " ORDER BY id DESC LIMIT ?"
+    with _LOCK, _connect() as conn:
+        rows = conn.execute(sql, args + (limit,)).fetchall()
+    return [
+        {
+            "id": row["id"],
+            "created_at": row["created_at"],
+            "run_id": row["run_id"],
+            "action": row["action"],
+            "outcome": row["outcome"],
+            "role": row["role"],
+            "token_fp": row["token_fp"],
+            "detail": row["detail"],
+        }
+        for row in rows
+    ]
+
+
+def _now_text() -> str:
+    from app import config
+
+    return config.now_utc().isoformat()

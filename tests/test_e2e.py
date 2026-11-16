@@ -13,6 +13,7 @@ PAGES = [
     ("/mapping", "字段映射"),
     ("/impact", "影响面"),
     ("/batches", "版本历史"),
+    ("/metrics", "指标依赖"),
     ("/spec", "迁移单"),
 ]
 
@@ -69,3 +70,42 @@ def test_home_renders_field_rows(client):
     assert "order_code" in home.text
     assert "pay_channel" in home.text
     assert "破坏" in home.text
+
+
+def test_metric_page_checks_conflicts_cycles_and_scope(client):
+    """页面要能核对冲突、环与授权范围，并且匿名视图不泄漏指标名。"""
+    anonymous = client.get("/metrics")
+    assert anonymous.status_code == 200
+    assert "未授权视图只给匿名链路" in anonymous.text
+    assert "授权范围" in anonymous.text
+    assert "pay_amt" not in anonymous.text
+    # 冲突与环在匿名视图里照样可见（只是对象匿名）
+    assert "METRIC_CONFLICT" in anonymous.text or "定义冲突" in anonymous.text
+    assert "依赖环" in anonymous.text
+
+    authorized = client.get("/metrics", params={"audit_token": "audit-local"})
+    assert authorized.status_code == 200
+    assert "pay_amt" in authorized.text
+    assert "审计日志" in authorized.text
+
+    denied = client.get("/metrics", params={"role": "auditor"})
+    assert denied.status_code == 200
+    assert "越权查看被拒" in denied.text
+
+
+def test_metric_export_matches_selected_version(client):
+    listing = client.get("/api/metrics/verdicts").json()
+    run_id = listing["runs"][0]["run_id"]
+    manifest = client.get("/api/export/metrics-manifest.json",
+                          params={"run_id": run_id}).json()
+    assert manifest["run_id"] == run_id
+    assert manifest["input_version"] == listing["runs"][0]["input_version"]
+    chains = client.get("/api/export/chains.csv", params={"run_id": run_id})
+    assert chains.status_code == 200
+    assert "node_anon" in chains.text
+
+    authorized = client.get("/api/export/chains.csv",
+                            params={"run_id": run_id, "audit_token": "audit-local"})
+    assert authorized.status_code == 200
+    assert "node" in authorized.text.splitlines()[0].split(",")
+    assert "pay_amt" in authorized.text
